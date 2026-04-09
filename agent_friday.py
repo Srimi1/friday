@@ -14,7 +14,6 @@ Run:
 
 import os
 import logging
-import subprocess
 
 from dotenv import load_dotenv
 from livekit.agents import JobContext, WorkerOptions, cli
@@ -22,7 +21,7 @@ from livekit.agents.voice import Agent, AgentSession
 from livekit.agents.llm import mcp
 
 # Plugins
-from livekit.plugins import google as lk_google, openai as lk_openai, sarvam, silero
+from livekit.plugins import google as lk_google, openai as lk_openai, sarvam, silero, deepgram as lk_deepgram
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -30,7 +29,7 @@ from livekit.plugins import google as lk_google, openai as lk_openai, sarvam, si
 
 STT_PROVIDER       = "sarvam"
 LLM_PROVIDER       = "gemini"
-TTS_PROVIDER       = "openai"
+TTS_PROVIDER       = "deepgram"
 
 GEMINI_LLM_MODEL   = "gemini-2.5-flash"
 OPENAI_LLM_MODEL   = "gpt-4o"
@@ -136,43 +135,7 @@ logger = logging.getLogger("friday-agent")
 logger.setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
-# Resolve Windows host IP from WSL
-# ---------------------------------------------------------------------------
-
-def _get_windows_host_ip() -> str:
-    """Get the Windows host IP by looking at the default network route."""
-    try:
-        # 'ip route' is the most reliable way to find the 'default' gateway
-        # which is always the Windows host in WSL.
-        cmd = "ip route show default | awk '{print $3}'"
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=2
-        )
-        ip = result.stdout.strip()
-        if ip:
-            logger.info("Resolved Windows host IP via gateway: %s", ip)
-            return ip
-    except Exception as exc:
-        logger.warning("Gateway resolution failed: %s. Trying fallback...", exc)
-
-    # Fallback to your original resolv.conf logic if 'ip route' fails
-    try:
-        with open("/etc/resolv.conf", "r") as f:
-            for line in f:
-                if "nameserver" in line:
-                    ip = line.split()[1]
-                    logger.info("Resolved Windows host IP via nameserver: %s", ip)
-                    return ip
-    except Exception:
-        pass
-
-    return "127.0.0.1"
-
 def _mcp_server_url() -> str:
-    # host_ip = _get_windows_host_ip()
-    # url = f"http://{host_ip}:{MCP_SERVER_PORT}/sse"
-    # url = f"https://ongoing-colleague-samba-pioneer.trycloudflare.com/sse"
     url = f"http://127.0.0.1:{MCP_SERVER_PORT}/sse"
     logger.info("MCP Server URL: %s", url)
     return url
@@ -222,6 +185,9 @@ def _build_tts():
     elif TTS_PROVIDER == "openai":
         logger.info("TTS → OpenAI TTS (%s / %s)", OPENAI_TTS_MODEL, OPENAI_TTS_VOICE)
         return lk_openai.TTS(model=OPENAI_TTS_MODEL, voice=OPENAI_TTS_VOICE, speed=TTS_SPEED)
+    elif TTS_PROVIDER == "deepgram":
+        logger.info("TTS → Deepgram Aura")
+        return lk_deepgram.TTS(model="aura-2-andromeda-en")
     else:
         raise ValueError(f"Unknown TTS_PROVIDER: {TTS_PROVIDER!r}")
 

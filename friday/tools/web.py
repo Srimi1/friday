@@ -4,18 +4,17 @@ Web tools — search, fetch pages, and global news briefings.
 
 import httpx
 import xml.etree.ElementTree as ET
-import asyncio  # Required for parallel execution
+import asyncio
 import re
-from datetime import datetime
 
-SEED_FEEDS = [
-    'https://feeds.bbci.co.uk/news/world/rss.xml',
-    'https://www.cnbc.com/id/100727362/device/rss/rss.html',
-    'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
-    'https://www.aljazeera.com/xml/rss/all.xml'
-]
+SEED_FEEDS = {
+    'https://feeds.bbci.co.uk/news/world/rss.xml': 'BBC',
+    'https://www.cnbc.com/id/100727362/device/rss/rss.html': 'CNBC',
+    'https://rss.nytimes.com/services/xml/rss/nyt/World.xml': 'NYT',
+    'https://www.aljazeera.com/xml/rss/all.xml': 'ALJAZEERA',
+}
 
-async def fetch_and_parse_feed(client, url):
+async def fetch_and_parse_feed(client, url, source_name):
     """Helper function to handle a single feed request and parse its XML."""
     try:
         response = await client.get(url, headers={'User-Agent': 'Friday-AI/1.0'}, timeout=5.0)
@@ -23,9 +22,7 @@ async def fetch_and_parse_feed(client, url):
             return []
 
         root = ET.fromstring(response.content)
-        # Extract source name from URL (e.g., 'BBC' or 'NYTIMES')
-        source_name = url.split('.')[1].upper()
-        
+
         feed_items = []
         # Get top 5 items per feed
         items = root.findall(".//item")[:5]
@@ -33,7 +30,7 @@ async def fetch_and_parse_feed(client, url):
             title = item.findtext("title")
             description = item.findtext("description")
             link = item.findtext("link")
-            
+
             if description:
                 description = re.sub('<[^<]+?>', '', description).strip()
 
@@ -59,7 +56,7 @@ def register(mcp):
         
         async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
             # 1. Create a list of 'tasks' (one for each URL)
-            tasks = [fetch_and_parse_feed(client, url) for url in SEED_FEEDS]
+            tasks = [fetch_and_parse_feed(client, url, name) for url, name in SEED_FEEDS.items()]
             
             # 2. Fire them all at once and wait for the results
             # results will be a list of lists: [[news from bbc], [news from nyt], ...]
@@ -80,11 +77,6 @@ def register(mcp):
             report.append(f"Link: {entry['link']}\n")
 
         return "\n".join(report)
-
-    @mcp.tool()
-    async def search_web(query: str) -> str:
-        """Search the web for a given query and return a summary of results."""
-        return f"[stub] Search results for: {query}"
 
     @mcp.tool()
     async def fetch_url(url: str) -> str:
